@@ -1,0 +1,1 @@
+# Paquete de settings — selecciona el módulo vía DJANGO_SETTINGS_MODULE

@@ -1,0 +1,75 @@
+# Production dependencies for both Linux and Windows
+# uvloop is included only on non-Windows platforms
+# Use pip install -r requirements_prod.txt on Linux or Windows directly
+
+# === Core ===
+Django==6.0.3
+python-decouple==3.8
+python-dotenv==1.2.2
+pydantic==2.13.3
+pydantic-settings==2.14.0
+
+# === AI & Agents ===
+langchain==1.2.17
+langgraph==1.1.10
+langchain-ollama==1.1.0
+ollama==0.6.2
+chromadb==1.5.9
+huggingface_hub==1.13.0
+onnxruntime==1.25.1
+numpy==2.4.4
+
+# === REST Framework ===
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+drf-spectacular==0.29.0
+
+# === Asynchronous Tasks & Queue ===
+celery==5.3.6
+redis==5.0.1
+django-celery-results==2.5.1
+
+# === Database ===
+psycopg2-binary==2.9.11
+SQLAlchemy==2.0.49
+
+# === Auth / Token ===
+PyJWT==2.11.0
+bcrypt==5.0.0
+
+# === Storage ===
+boto3==1.42.51
+django-storages==1.14.6
+
+# === CORS / Filters ===
+django-cors-headers==4.9.0
+django-filter==25.2
+
+# === Images ===
+Pillow==12.1.1
+
+# === Utilities & UI ===
+requests==2.33.1
+rich==15.0.0
+python-dateutil==2.9.0.post0
+six==1.17.0
+tenacity==9.1.4
+
+# === Sub-dependencias fijadas para reproducibilidad ===
+asgiref==3.11.1
+botocore==1.42.51
+inflection==0.5.1
+jmespath==1.1.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==0.30.0
+s3transfer==0.16.0
+sqlparse==0.5.5
+typing_extensions==4.15.0
+uritemplate==4.2.0
+urllib3==2.6.3
+PyYAML==6.0.3
+attrs==25.4.0
+uvicorn==0.46.0
+uvloop==0.22.1 ; sys_platform != "win32"

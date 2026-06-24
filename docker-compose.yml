@@ -1,0 +1,92 @@
+# docker-compose.yml
+# Levanta el backend completo en producción con Docker Compose.
+# Uso: docker-compose up -d
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB:       ${DB_NAME}
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (broker Celery + caché + Channels) ────────────────
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Django (ASGI con Daphne) ────────────────────────────────
+  web:
+    build: .
+    restart: always
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+    env_file: .env
+    environment:
+      DJANGO_ENV: production
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_files:/app/media
+      - static_files:/app/static
+
+  # ── Celery Worker ───────────────────────────────────────────
+  celery_worker:
+    build: .
+    restart: always
+    command: celery -A core worker -l warning --concurrency=4
+    env_file: .env
+    environment:
+      DJANGO_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat (tareas programadas) ───────────────────────
+  celery_beat:
+    build: .
+    restart: always
+    command: celery -A core beat -l warning --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file: .env
+    environment:
+      DJANGO_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_files:
+  static_files:

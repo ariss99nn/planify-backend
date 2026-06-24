@@ -1,0 +1,1 @@
+from . import ficha_signals

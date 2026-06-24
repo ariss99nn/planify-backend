@@ -1,0 +1,3 @@
+from ficha.serializers.historial_etapa.historial_etapa_list_serializer import HistorialEtapaListSerializer
+
+__all__ = ['HistorialEtapaListSerializer']

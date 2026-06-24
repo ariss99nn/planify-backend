@@ -1,0 +1,11 @@
+export $(grep -v '^#' .env | xargs) && python manage.py create_super_admin
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+psql -U nilo -h localhost -d planify_db
+sudo -u postgres psql
+
+\c planify_db
+\dt
+\d users_user
