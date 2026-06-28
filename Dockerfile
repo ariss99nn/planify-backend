@@ -20,11 +20,13 @@ RUN pip install --upgrade pip && pip install -r requirements_prod.txt
 
 COPY . .
 
+# ── Permisos scripts ──────────────────────────────────────────
+RUN chmod +x scripts/start.sh scripts/worker.sh scripts/beat.sh
+
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 RUN chown -R appuser:appgroup /app
 USER appuser
 
 EXPOSE 8000
 
-# ── Comando de inicio ──────────────────────────────────────────
-CMD ["scripts/start.sh"]
+CMD ["sh", "scripts/start.sh"]
