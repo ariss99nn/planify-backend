@@ -26,3 +26,4 @@ Thumbs.db
 *.override.yml
 media/
 utilities.txt
+chroma_db/
