@@ -70,4 +70,5 @@ uvicorn==0.46.0
 uvloop==0.22.1 ; sys_platform != "win32"
 asgiref==3.11.1
 sqlparse==0.5.5
-typing_extensions==4.15.0python-json-logger==2.0.7
+typing_extensions==4.15.0
+python-json-logger==2.0.7
