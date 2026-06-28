@@ -23,4 +23,6 @@ Thumbs.db
 .idea/
 
 # Docker
-*.override.ymlmedia/
+*.override.yml
+media/
+utilities.txt
