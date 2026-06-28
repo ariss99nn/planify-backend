@@ -5,9 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-# Reutiliza los permisos ya existentes — no hay nada nuevo que crear
 from users.permissions import IsStaffLike, IsEstudiante
-
 from .services.chatbot_service import CHRONOSIAChatbot
 from .services.context_builder import ContextBuilder
 
@@ -22,23 +20,15 @@ def _get_chatbot() -> CHRONOSIAChatbot:
 
 
 class ChatRateThrottle(UserRateThrottle):
-    """30 mensajes por minuto por usuario."""
-    rate = '30/min'
+    scope = 'chat'
 
 
 class IsChatbotAllowed(IsAuthenticated):
-    """
-    Puede usar el chatbot cualquiera que esté autenticado
-    y tenga un rol reconocido (estudiante, docente, coordinador, administrativo).
-    Hereda IsAuthenticated para no repetir la verificación de JWT.
-    """
     message = 'Tu rol no tiene acceso al asistente.'
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
-        # IsStaffLike cubre docente + coordinador + administrativo
-        # IsEstudiante cubre estudiante
         return (
             IsStaffLike().has_permission(request, view)
             or IsEstudiante().has_permission(request, view)
@@ -77,7 +67,6 @@ class ChatbotView(APIView):
                 'respuesta': respuesta,
                 'rol': request.user.rol,
             })
-
         except Exception as e:
             return Response(
                 {'error': str(e)},

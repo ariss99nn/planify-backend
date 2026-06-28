@@ -1,0 +1,118 @@
+services:
+
+  # ── Django Web ──────────────────────────────────────────────
+  - type: web
+    name: planify-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    startCommand: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             python manage.py shell -c 'from chatbot.tasks.indexer_task import reindexar_datos_sistema; reindexar_datos_sistema()' &&
+             daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+    healthCheckPath: /api/schema/
+    envVars:
+      - key: DJANGO_ENV
+        value: production
+      - key: SECRET_KEY
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: REDIS_URL
+        fromService:
+          name: planify-redis
+          type: redis
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ALLOW_ALL
+        value: "False"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CORS_ALLOW_CREDENTIALS
+        value: "False"
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: USE_S3
+        value: "False"
+      - key: LOG_LEVEL
+        value: WARNING
+      - key: DJANGO_LANGUAGE_CODE
+        value: es-co
+      - key: DJANGO_TIMEZONE
+        value: America/Bogota
+
+  # ── Celery Worker ───────────────────────────────────────────
+  - type: worker
+    name: planify-celery-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    startCommand: celery -A core worker -l warning --concurrency=2
+    envVars:
+      - key: DJANGO_ENV
+        value: production
+      - key: SECRET_KEY
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: REDIS_URL
+        fromService:
+          name: planify-redis
+          type: redis
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+
+  # ── Celery Beat ─────────────────────────────────────────────
+  - type: worker
+    name: planify-celery-beat
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    startCommand: celery -A core beat -l warning --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    envVars:
+      - key: DJANGO_ENV
+        value: production
+      - key: SECRET_KEY
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: REDIS_URL
+        fromService:
+          name: planify-redis
+          type: redis
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
+
+  # ── Redis ───────────────────────────────────────────────────
+  - type: redis
+    name: planify-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru

@@ -1,112 +1,114 @@
+# programa/tests/factories.py
+"""
+Factories del módulo programa.
+Archivo creado desde cero — no existía en el proyecto.
+
+Dependencias de creación:
+  make_programa() → independiente
+  make_version(programa) → necesita un Programa
+  make_modulo(version) → necesita una VersionPrograma
+"""
+from datetime import date
+
 from programa.models.programa_model import Programa
 from programa.models.version_programa_model import VersionPrograma
 from programa.models.modulo_model import Modulo
-from programa.models.docente_modulo_model import DocenteModulo
-from datetime import date
 
 
 def make_programa(
-    nombre='Técnico en Sistemas',
+    nombre=None,
     nivel=Programa.Nivel.TECNICO,
-    estado=Programa.Estado.ACTIVO,
     horas_lectivas=1200,
     horas_practicas=600,
+    estado=Programa.Estado.ACTIVO,
+    trimestres_totales=6,
+    tipo_formacion=Programa.TipoFormacion.POR_OFERTA,
     **kwargs,
 ):
+    """
+    Crea un Programa con valores mínimos válidos.
+    tipo_formacion=POR_OFERTA es el más simple (no requiere trimestres_cadena).
+    """
     counter = Programa.objects.count()
+    nombre_final = nombre or f'Programa Test {counter}'
     return Programa.objects.create(
-        nombre=nombre if not counter else f'{nombre} {counter}',
+        nombre=nombre_final,
         nivel=nivel,
-        estado=estado,
         horas_lectivas=horas_lectivas,
         horas_practicas=horas_practicas,
+        estado=estado,
+        trimestres_totales=trimestres_totales,
+        tipo_formacion=tipo_formacion,
         **kwargs,
     )
 
 
 def make_version(
     programa=None,
-    numero=1,
-    vigente=True,
+    numero=None,
+    vigente=False,
     fecha_inicio=None,
     **kwargs,
 ):
+    """
+    Crea una VersionPrograma.
+    Si vigente=True, otras versiones vigentes del mismo programa
+    quedan automáticamente en vigente=False (lógica del modelo save()).
+    """
     if programa is None:
         programa = make_programa()
-    if fecha_inicio is None:
-        fecha_inicio = date(2024, 1, 1)
-    # Evitar conflicto de unique_together
-    numero_final = numero
-    while VersionPrograma.objects.filter(
-        programa=programa, numero=numero_final
-    ).exists():
-        numero_final += 1
+
+    # Generar número único para el programa
+    if numero is None:
+        existing_nums = list(
+            VersionPrograma.objects.filter(programa=programa)
+            .values_list('numero', flat=True)
+        )
+        numero = max(existing_nums, default=0) + 1
+
     return VersionPrograma.objects.create(
         programa=programa,
-        numero=numero_final,
+        numero=numero,
         vigente=vigente,
-        fecha_inicio=fecha_inicio,
+        fecha_inicio=fecha_inicio or date(2024, 1, 1),
         **kwargs,
     )
 
 
 def make_modulo(
     version=None,
-    nombre='Fundamentos de Programación',
-    orden=1,
+    nombre=None,
+    orden=None,
     horas_lectivas=80,
     horas_practicas=40,
     estado=Modulo.Estado.ACTIVO,
     **kwargs,
 ):
+    """
+    Crea un Módulo dentro de una VersionPrograma.
+    El orden es único por versión — se autoincrementa si ya existe.
+    """
     if version is None:
         version = make_version()
-    # Evitar conflicto de unique_together
-    orden_final = orden
-    while Modulo.objects.filter(
-        version=version, orden=orden_final
-    ).exists():
-        orden_final += 1
+
+    if nombre is None:
+        counter = Modulo.objects.filter(version=version).count()
+        nombre = f'Módulo Test {counter}'
+
+    # Encontrar primer orden disponible
+    if orden is None:
+        existing_orders = list(
+            Modulo.objects.filter(version=version)
+            .values_list('orden', flat=True)
+        )
+        orden = max(existing_orders, default=0) + 1
+
     return Modulo.objects.create(
         version=version,
         nombre=nombre,
-        orden=orden_final,
+        orden=orden,
         horas_lectivas=horas_lectivas,
         horas_practicas=horas_practicas,
         estado=estado,
         **kwargs,
     )
-
-
-def make_docente_modulo(docente, modulo=None, activo=True):
-    if modulo is None:
-        modulo = make_modulo()
-    return DocenteModulo.objects.create(
-        docente=docente,
-        modulo=modulo,
-        activo=activo,
-    )
-
-def make_ficha_para_estudiante(version, estudiante):
-    from ficha.models.ficha_model import Ficha
-    from ficha.models.ficha_estudiante_model import FichaEstudiante
-    from datetime import date
-    counter = Ficha.objects.count()
-    ficha = Ficha.objects.create(
-        codigo_ficha=f'FICHA-{counter:04d}',
-        version=version,
-        jornada=Ficha.Jornada.MANANA,
-        numero_estudiantes_estimado=30,
-        etapa=Ficha.Etapa.LECTIVA,
-        horas_semanales_objetivo=40,
-        trimestre=1,
-        estado=True,
-        fecha_inicio=date(2024, 1, 1),
-    )
-    FichaEstudiante.objects.create(
-        ficha=ficha,
-        estudiante=estudiante,
-        activo=True,
-        es_cadena=False,
-    )
-    return ficha

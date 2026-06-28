@@ -9,3 +9,6 @@ sudo -u postgres psql
 \c planify_db
 \dt
 \d users_user
+
+
+DJANGO_SETTINGS_MODULE=core.settings.settings_dev daphne -b 0.0.0.0 -p 8000 core.asgi:application

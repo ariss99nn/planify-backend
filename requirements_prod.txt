@@ -1,7 +1,3 @@
-# Production dependencies for both Linux and Windows
-# uvloop is included only on non-Windows platforms
-# Use pip install -r requirements_prod.txt on Linux or Windows directly
-
 # === Core ===
 Django==6.0.3
 python-decouple==3.8
@@ -9,33 +5,43 @@ python-dotenv==1.2.2
 pydantic==2.13.3
 pydantic-settings==2.14.0
 
-# === AI & Agents ===
+# === AI (Groq + HuggingFace — sin Ollama) ===
 langchain==1.2.17
-langgraph==1.1.10
-langchain-ollama==1.1.0
-ollama==0.6.2
+langchain-core==1.4.8
+langchain-groq==1.1.3
+langchain-huggingface==1.2.2
+langchain-chroma==1.1.0
+langchain-community==0.4.1
+langchain-text-splitters==1.1.2
+groq==0.37.1
+sentence-transformers==5.6.0
 chromadb==1.5.9
 huggingface_hub==1.13.0
-onnxruntime==1.25.1
+torch==2.12.1
+transformers==5.12.1
+tokenizers==0.22.2
+safetensors==0.8.0
 numpy==2.4.4
+scikit-learn==1.9.0
 
 # === REST Framework ===
 djangorestframework==3.16.1
 djangorestframework-simplejwt==5.5.1
 drf-spectacular==0.29.0
 
-# === Asynchronous Tasks & Queue ===
+# === Async / WebSockets ===
+daphne==4.2.1
+channels==4.3.2
+channels_redis==4.3.0
+
+# === Celery ===
 celery==5.3.6
 redis==5.0.1
 django-celery-results==2.5.1
+django-celery-beat==2.9.0
 
 # === Database ===
 psycopg2-binary==2.9.11
-SQLAlchemy==2.0.49
-
-# === Auth / Token ===
-PyJWT==2.11.0
-bcrypt==5.0.0
 
 # === Storage ===
 boto3==1.42.51
@@ -45,31 +51,23 @@ django-storages==1.14.6
 django-cors-headers==4.9.0
 django-filter==25.2
 
-# === Images ===
+# === Imágenes / Reportes ===
 Pillow==12.1.1
+reportlab==4.2.0
+openpyxl==3.1.5
 
-# === Utilities & UI ===
+# === Auth ===
+PyJWT==2.11.0
+bcrypt==5.0.0
+
+# === Utilidades ===
 requests==2.33.1
 rich==15.0.0
 python-dateutil==2.9.0.post0
-six==1.17.0
 tenacity==9.1.4
-
-# === Sub-dependencias fijadas para reproducibilidad ===
-asgiref==3.11.1
-botocore==1.42.51
-inflection==0.5.1
-jmespath==1.1.0
-jsonschema==4.26.0
-jsonschema-specifications==2025.9.1
-referencing==0.37.0
-rpds-py==0.30.0
-s3transfer==0.16.0
-sqlparse==0.5.5
-typing_extensions==4.15.0
-uritemplate==4.2.0
-urllib3==2.6.3
 PyYAML==6.0.3
-attrs==25.4.0
 uvicorn==0.46.0
 uvloop==0.22.1 ; sys_platform != "win32"
+asgiref==3.11.1
+sqlparse==0.5.5
+typing_extensions==4.15.0
