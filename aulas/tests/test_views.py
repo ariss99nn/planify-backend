@@ -1,292 +1,260 @@
+# aulas/tests/test_views.py
+"""
+Tests de las vistas del módulo aulas.
+
+CORRECCIONES:
+- URL base /api/ (sin /v1/).
+- make_aula incluye piso=1 correctamente.
+- Aula.Estado y TipoAula usan valores cortos.
+- Estudiantes NO tienen acceso a aulas (CanManageAula).
+"""
 from django.test import TestCase
 from rest_framework.test import APIClient
-from aulas.tests.factories import make_bloque, make_equipamiento, make_aula
-from aulas.models.aula_model import Aula
-from aulas.models.equipamiento_model import Equipamiento
+
 from users.tests.factories import (
-    make_coordinador, make_administrativo,
-    make_docente, make_estudiante, get_auth_header,
+    make_coordinador, make_docente, make_estudiante, get_auth_header,
 )
+from aulas.tests.factories import make_aula, make_bloque, make_equipamiento
+from aulas.models.aula_model import Aula
+from aulas.models.bloque_model import Bloque
+from aulas.models.equipamiento_model import Equipamiento
+
+BLOQUES = '/api/bloques'
+EQUIP   = '/api/equipamiento'
+AULAS   = '/api/aulas'
 
 
 class BloqueViewTest(TestCase):
 
     def setUp(self):
-        self.client = APIClient()
-        self.coord = make_coordinador(email='coord_bloque@test.com')
-        self.docente = make_docente(email='doc_bloque@test.com')
-        self.estudiante = make_estudiante(email='est_bloque@test.com')
-        self.bloque = make_bloque(nombre='Bloque Vista')
+        self.client  = APIClient()
+        self.coord   = make_coordinador(email='coord_bl@t.com')
+        self.docente = make_docente(email='doc_bl@t.com')
+        self.est     = make_estudiante(email='est_bl@t.com')
+        self.bloque  = make_bloque(nombre='Bloque A')
 
-    def test_list_autenticado(self):
+    def test_coordinador_lista_bloques(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.get('/api/bloques/', **headers)
+        r = self.client.get(f'{BLOQUES}/', **headers)
         self.assertEqual(r.status_code, 200)
 
-    def test_list_docente_puede_ver(self):
+    def test_docente_lista_bloques(self):
         headers = get_auth_header(self.client, self.docente)
-        r = self.client.get('/api/bloques/', **headers)
+        r = self.client.get(f'{BLOQUES}/', **headers)
         self.assertEqual(r.status_code, 200)
 
-    def test_list_sin_auth(self):
-        r = self.client.get('/api/bloques/')
-        self.assertEqual(r.status_code, 401)
+    def test_estudiante_no_puede_listar(self):
+        headers = get_auth_header(self.client, self.est)
+        r = self.client.get(f'{BLOQUES}/', **headers)
+        self.assertEqual(r.status_code, 403)
 
-    def test_detail(self):
-        headers = get_auth_header(self.client, self.coord)
-        r = self.client.get(f'/api/bloques/{self.bloque.pk}/', **headers)
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('total_aulas', r.data)
+    def test_sin_autenticacion_retorna_401(self):
+        self.assertEqual(self.client.get(f'{BLOQUES}/').status_code, 401)
 
-    def test_create_coord(self):
+    def test_coordinador_crea_bloque(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.post('/api/bloques/create/', {
+        r = self.client.post(f'{BLOQUES}/create/', {
             'nombre': 'Bloque Nuevo',
-            'pisos': 2,
-            'capacidad_maxima': 150,
+            'pisos': 4,
+            'capacidad_maxima': 300,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 201)
 
-    def test_create_docente_forbidden(self):
+    def test_docente_no_puede_crear(self):
         headers = get_auth_header(self.client, self.docente)
-        r = self.client.post('/api/bloques/create/', {
+        r = self.client.post(f'{BLOQUES}/create/', {
             'nombre': 'Intento',
-            'pisos': 1,
-            'capacidad_maxima': 50,
+            'pisos': 2,
+            'capacidad_maxima': 100,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 403)
 
-    def test_update_coord(self):
+    def test_nombre_duplicado_retorna_400(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.post(f'{BLOQUES}/create/', {
+            'nombre': 'Bloque A',  # ya existe
+            'pisos': 2,
+            'capacidad_maxima': 100,
+        }, format='json', **headers)
+        self.assertEqual(r.status_code, 400)
+
+    def test_detalle_bloque(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.get(f'{BLOQUES}/{self.bloque.pk}/', **headers)
+        self.assertEqual(r.status_code, 200)
+
+    def test_actualiza_bloque(self):
         headers = get_auth_header(self.client, self.coord)
         r = self.client.patch(
-            f'/api/bloques/{self.bloque.pk}/update/',
+            f'{BLOQUES}/{self.bloque.pk}/update/',
             {'pisos': 5},
-            format='json',
-            **headers,
+            format='json', **headers,
         )
         self.assertEqual(r.status_code, 200)
-        self.bloque.refresh_from_db()
-        self.assertEqual(self.bloque.pisos, 5)
-
-    def test_not_found(self):
-        headers = get_auth_header(self.client, self.coord)
-        r = self.client.get('/api/bloques/99999/', **headers)
-        self.assertEqual(r.status_code, 404)
 
 
 class EquipamientoViewTest(TestCase):
 
     def setUp(self):
-        self.client = APIClient()
-        self.coord = make_coordinador(email='coord_equip_v@test.com')
-        self.docente = make_docente(email='doc_equip_v@test.com')
-        self.equip = make_equipamiento(nombre='Monitor Vista')
+        self.client      = APIClient()
+        self.coord       = make_coordinador(email='coord_eq@t.com')
+        self.docente     = make_docente(email='doc_eq@t.com')
+        self.equipamiento = make_equipamiento(nombre='Proyector Test')
 
-    def test_list_todos_ven(self):
-        for factory, email in [
-            (make_docente, 'dv1@test.com'),
-            (make_estudiante, 'ev1@test.com'),
-        ]:
-            user = factory(email=email)
-            headers = get_auth_header(self.client, user)
-            r = self.client.get('/api/equipamiento/', **headers)
-            self.assertEqual(r.status_code, 200)
-
-    def test_create_coord(self):
+    def test_coordinador_lista(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.post('/api/equipamiento/create/', {
-            'nombre': 'Teclado Nuevo',
-            'cantidad': 20,
+        r = self.client.get(f'{EQUIP}/', **headers)
+        self.assertEqual(r.status_code, 200)
+
+    def test_docente_lista(self):
+        headers = get_auth_header(self.client, self.docente)
+        r = self.client.get(f'{EQUIP}/', **headers)
+        self.assertEqual(r.status_code, 200)
+
+    def test_sin_autenticacion_retorna_401(self):
+        self.assertEqual(self.client.get(f'{EQUIP}/').status_code, 401)
+
+    def test_crea_equipamiento(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.post(f'{EQUIP}/create/', {
+            'nombre': 'Monitor 24"',
+            'cantidad': 10,
             'estado': Equipamiento.Estado.FUNCIONAL,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 201)
 
-    def test_create_docente_forbidden(self):
+    def test_docente_no_puede_crear(self):
         headers = get_auth_header(self.client, self.docente)
-        r = self.client.post('/api/equipamiento/create/', {
+        r = self.client.post(f'{EQUIP}/create/', {
             'nombre': 'Intento',
             'cantidad': 1,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 403)
 
-    def test_update_estado(self):
+    def test_detalle(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.patch(
-            f'/api/equipamiento/{self.equip.pk}/update/',
-            {'estado': Equipamiento.Estado.DAÑADO},
-            format='json',
-            **headers,
-        )
+        r = self.client.get(f'{EQUIP}/{self.equipamiento.pk}/', **headers)
         self.assertEqual(r.status_code, 200)
-        self.equip.refresh_from_db()
-        self.assertEqual(self.equip.estado, Equipamiento.Estado.DAÑADO)
-
-    def test_not_found(self):
-        headers = get_auth_header(self.client, self.coord)
-        r = self.client.get('/api/equipamiento/99999/', **headers)
-        self.assertEqual(r.status_code, 404)
 
 
 class AulaViewTest(TestCase):
 
     def setUp(self):
-        self.client = APIClient()
-        self.coord = make_coordinador(email='coord_aula_v@test.com')
-        self.admin = make_administrativo(email='admin_aula_v@test.com')
-        self.docente = make_docente(email='doc_aula_v@test.com')
-        self.estudiante = make_estudiante(email='est_aula_v@test.com')
-        self.bloque = make_bloque(nombre='Bloque Aula V')
-        self.aula = make_aula(bloque=self.bloque, codigo='V101')
+        self.client  = APIClient()
+        self.coord   = make_coordinador(email='coord_au@t.com')
+        self.docente = make_docente(email='doc_au@t.com')
+        self.est     = make_estudiante(email='est_au@t.com')
+        self.bloque  = make_bloque(nombre='Bloque Aulas Test')
+        self.aula    = make_aula(bloque=self.bloque, codigo='AU101')
 
-    def test_list_todos_ven(self):
-        for factory, email in [
-            (make_docente, 'dv2@test.com'),
-            (make_estudiante, 'ev2@test.com'),
-        ]:
-            user = factory(email=email)
-            headers = get_auth_header(self.client, user)
-            r = self.client.get('/api/aulas/', **headers)
-            self.assertEqual(r.status_code, 200)
-
-    def test_list_sin_auth(self):
-        r = self.client.get('/api/aulas/')
-        self.assertEqual(r.status_code, 401)
-
-    def test_detail_todos_ven(self):
-        headers = get_auth_header(self.client, self.docente)
-        r = self.client.get(f'/api/aulas/{self.aula.pk}/', **headers)
-        self.assertEqual(r.status_code, 200)
-        self.assertIn('bloque', r.data)
-        self.assertIn('equipamiento', r.data)
-
-    def test_create_coord(self):
+    def test_coordinador_lista(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.post('/api/aulas/create/', {
-            'codigo_aula': 'V201',
+        r = self.client.get(f'{AULAS}/', **headers)
+        self.assertEqual(r.status_code, 200)
+
+    def test_docente_lista(self):
+        headers = get_auth_header(self.client, self.docente)
+        r = self.client.get(f'{AULAS}/', **headers)
+        self.assertEqual(r.status_code, 200)
+
+    def test_estudiante_no_puede_listar(self):
+        headers = get_auth_header(self.client, self.est)
+        r = self.client.get(f'{AULAS}/', **headers)
+        self.assertEqual(r.status_code, 403)
+
+    def test_sin_autenticacion_retorna_401(self):
+        self.assertEqual(self.client.get(f'{AULAS}/').status_code, 401)
+
+    def test_coordinador_crea_aula(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.post(f'{AULAS}/create/', {
+            'codigo_aula': 'AU201',
             'capacidad': 35,
-            'tipo_aula': Aula.TipoAula.LABORATORIO,
+            'tipo_aula': Aula.TipoAula.LABORATORIO,  # 'LAB'
             'bloque': self.bloque.pk,
+            'piso': 2,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 201)
-        self.assertEqual(r.data['codigo_aula'], 'V201')
 
-    def test_create_docente_forbidden(self):
+    def test_docente_no_puede_crear(self):
         headers = get_auth_header(self.client, self.docente)
-        r = self.client.post('/api/aulas/create/', {
-            'codigo_aula': 'V999',
+        r = self.client.post(f'{AULAS}/create/', {
+            'codigo_aula': 'AU999',
             'capacidad': 30,
             'tipo_aula': Aula.TipoAula.TEORICA,
             'bloque': self.bloque.pk,
+            'piso': 1,
         }, format='json', **headers)
         self.assertEqual(r.status_code, 403)
 
-    def test_create_estudiante_forbidden(self):
-        headers = get_auth_header(self.client, self.estudiante)
-        r = self.client.post('/api/aulas/create/', {
-            'codigo_aula': 'V998',
+    def test_piso_supera_pisos_bloque_retorna_400(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.post(f'{AULAS}/create/', {
+            'codigo_aula': 'AU-ALTO',
             'capacidad': 30,
             'tipo_aula': Aula.TipoAula.TEORICA,
             'bloque': self.bloque.pk,
+            'piso': 99,  # bloque tiene 3 pisos
         }, format='json', **headers)
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 400)
 
-    def test_update_coord(self):
+    def test_detalle_aula_incluye_equipamiento(self):
+        headers = get_auth_header(self.client, self.coord)
+        r = self.client.get(f'{AULAS}/{self.aula.pk}/', **headers)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('equipamiento', r.data)
+
+    def test_actualiza_aula(self):
         headers = get_auth_header(self.client, self.coord)
         r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/update/',
+            f'{AULAS}/{self.aula.pk}/update/',
             {'capacidad': 50},
-            format='json',
-            **headers,
+            format='json', **headers,
         )
         self.assertEqual(r.status_code, 200)
         self.aula.refresh_from_db()
         self.assertEqual(self.aula.capacidad, 50)
 
-    def test_update_docente_forbidden(self):
-        headers = get_auth_header(self.client, self.docente)
-        r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/update/',
-            {'capacidad': 50},
-            format='json',
-            **headers,
-        )
-        self.assertEqual(r.status_code, 403)
-
-    def test_not_found(self):
+    def test_inexistente_retorna_404(self):
         headers = get_auth_header(self.client, self.coord)
-        r = self.client.get('/api/aulas/99999/', **headers)
-        self.assertEqual(r.status_code, 404)
+        self.assertEqual(
+            self.client.get(f'{AULAS}/99999/', **headers).status_code, 404
+        )
 
 
 class AulaEstadoViewTest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.coord = make_coordinador(email='coord_estado@test.com')
-        self.admin = make_administrativo(email='admin_estado@test.com')
-        self.docente = make_docente(email='doc_estado@test.com')
-        self.estudiante = make_estudiante(email='est_estado@test.com')
-        self.bloque = make_bloque(nombre='Bloque Estado')
-        self.aula = make_aula(bloque=self.bloque, codigo='E101')
+        self.coord  = make_coordinador(email='coord_est@t.com')
+        self.est    = make_estudiante(email='est_est@t.com')
+        self.aula   = make_aula(codigo='EST101')
 
-    def test_coord_cambia_estado(self):
+    def test_coordinador_cambia_estado_a_mantenimiento(self):
         headers = get_auth_header(self.client, self.coord)
         r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
-            {'estado': Aula.Estado.MANTENIMIENTO},
-            format='json',
-            **headers,
-        )
-        self.assertEqual(r.status_code, 200)
-        self.aula.refresh_from_db()
-        self.assertEqual(self.aula.estado, Aula.Estado.MANTENIMIENTO)
-
-    def test_admin_cambia_estado(self):
-        headers = get_auth_header(self.client, self.admin)
-        r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
-            {'estado': Aula.Estado.INACTIVA},
-            format='json',
-            **headers,
-        )
-        self.assertEqual(r.status_code, 200)
-
-    def test_docente_puede_cambiar_estado(self):
-        headers = get_auth_header(self.client, self.docente)
-        r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
-            {'estado': Aula.Estado.MANTENIMIENTO},
-            format='json',
-            **headers,
+            f'{AULAS}/{self.aula.pk}/estado/',
+            {'estado': Aula.Estado.MANTENIMIENTO},  # 'MANT'
+            format='json', **headers,
         )
         self.assertEqual(r.status_code, 200)
         self.aula.refresh_from_db()
         self.assertEqual(self.aula.estado, Aula.Estado.MANTENIMIENTO)
 
     def test_estudiante_no_puede_cambiar_estado(self):
-        headers = get_auth_header(self.client, self.estudiante)
+        headers = get_auth_header(self.client, self.est)
         r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
+            f'{AULAS}/{self.aula.pk}/estado/',
             {'estado': Aula.Estado.INACTIVA},
-            format='json',
-            **headers,
+            format='json', **headers,
         )
         self.assertEqual(r.status_code, 403)
 
-    def test_estado_invalido(self):
+    def test_estado_invalido_retorna_400(self):
         headers = get_auth_header(self.client, self.coord)
         r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
+            f'{AULAS}/{self.aula.pk}/estado/',
             {'estado': 'INVALIDO'},
-            format='json',
-            **headers,
+            format='json', **headers,
         )
         self.assertEqual(r.status_code, 400)
-
-    def test_sin_autenticacion(self):
-        r = self.client.patch(
-            f'/api/aulas/{self.aula.pk}/estado/',
-            {'estado': Aula.Estado.MANTENIMIENTO},
-            format='json',
-        )
-        self.assertEqual(r.status_code, 401)

@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'notificaciones.apps.NotificacionesConfig',
     'exportacion.apps.ExportacionConfig',
     'analitica.apps.AnaliticaConfig',
+    'chatbot',
     'channels',
 ]
 
@@ -140,7 +141,7 @@ REST_FRAMEWORK = {
     ],
 
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-
+    'DEFAULT_THROTTLE_RATES': {'user': '100/hour', 'chat': '30/min'},
     # Paginación por defecto; cada app puede sobreescribirla.
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -313,6 +314,7 @@ CELERY_BEAT_SCHEDULE = {
         'task':     'aulas.tasks.detectar_aulas_con_conflicto',
         'schedule': crontab(hour=7, minute=0),
     },
+    'reindexar-chatbot': {'task': 'chatbot.reindexar', 'schedule': crontab(hour=2, minute=0)},
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -320,15 +322,6 @@ CELERY_BEAT_SCHEDULE = {
 # ──────────────────────────────────────────────────────────────────────────────
 ASGI_APPLICATION = 'core.asgi.application'
 
-# ──────────────────────────────────────────────────────────────────────────────
-# OLLAMA (chatbot RAG)
-# ──────────────────────────────────────────────────────────────────────────────
-OLLAMA_CONFIG = {
-    'BASE_URL':         config('OLLAMA_BASE_URL',  default='http://localhost:11434'),
-    'LLM_MODEL':        config('OLLAMA_LLM_MODEL', default='llama3'),
-    'EMBEDDING_MODEL':  config('OLLAMA_EMB_MODEL', default='nomic-embed-text'),
-    'CHROMA_PERSIST_DIR': os.path.join(BASE_DIR, 'chroma_db'),
-}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # INTERNACIONALIZACIÓN
@@ -386,3 +379,5 @@ LOGGING = {
         },
     },
 }
+
+GROQ_API_KEY = config('GROQ_API_KEY', default='')

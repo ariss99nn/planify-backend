@@ -1,35 +1,56 @@
+# competencia/tests/factories.py
+"""
+Factories del módulo competencia.
+Archivo creado desde cero — no existía en el proyecto.
+
+Importante:
+- Competencia PRINCIPAL requiere asignatura (no puede ser null).
+- Competencia TRANSVERSAL requiere asignatura=None y horas_trimestre_transversal.
+- La función make_competencia() crea PRINCIPAL por defecto.
+- Para transversales usar make_competencia_transversal().
+"""
 from competencia.models.asignatura_model import Asignatura
 from competencia.models.competencia_model import Competencia
 from competencia.models.resultado_aprendizaje_model import ResultadoAprendizaje
-from competencia.models.docente_asignatura_model import DocenteAsignatura
 from programa.tests.factories import make_modulo
 
 
 def make_asignatura(
     modulo=None,
-    nombre='Introducción a la Programación',
+    nombre=None,
     tipo=Asignatura.Tipo.TEORICO_PRACTICA,
+    horas_lectivas=80,
+    horas_practicas=40,
+    orden=None,
     estado=Asignatura.Estado.ACTIVA,
-    horas_lectivas=60,
-    horas_practicas=30,
-    orden=1,
     **kwargs,
 ):
+    """
+    Crea una Asignatura dentro de un Módulo.
+    El orden es único por módulo — se autoincrementa.
+    """
     if modulo is None:
         modulo = make_modulo()
-    orden_final = orden
-    while Asignatura.objects.filter(
-        modulo=modulo, orden=orden_final
-    ).exists():
-        orden_final += 1
+
+    if nombre is None:
+        counter = Asignatura.objects.filter(modulo=modulo).count()
+        nombre = f'Asignatura Test {counter}'
+
+    if orden is None:
+        existing_orders = list(
+            Asignatura.objects.filter(modulo=modulo)
+            .values_list('orden', flat=True)
+        )
+        orden = max(existing_orders, default=0) + 1
+
     return Asignatura.objects.create(
         modulo=modulo,
         nombre=nombre,
         tipo=tipo,
-        estado=estado,
         horas_lectivas=horas_lectivas,
         horas_practicas=horas_practicas,
-        orden=orden_final,
+        orden=orden,
+        estado=estado,
         **kwargs,
     )
 
@@ -37,20 +58,65 @@ def make_asignatura(
 def make_competencia(
     asignatura=None,
     codigo=None,
-    nombre='Desarrollar soluciones algorítmicas',
+    nombre=None,
+    tipo=Competencia.TipoCompetencia.PRINCIPAL,
     **kwargs,
 ):
+    """
+    Crea una Competencia PRINCIPAL.
+
+    IMPORTANTE: Competencia PRINCIPAL requiere asignatura (clean() lo valida).
+    Si no se pasa, se crea una automáticamente.
+
+    Para transversales usar make_competencia_transversal().
+    """
     if asignatura is None:
         asignatura = make_asignatura()
+
     counter = Competencia.objects.count()
-    codigo_final = codigo or f'COMP-{counter:03d}'
+    codigo_final = codigo or f'COMP-{counter:04d}'
+    # Evitar código duplicado (campo unique)
     while Competencia.objects.filter(codigo=codigo_final).exists():
         counter += 1
-        codigo_final = f'COMP-{counter:03d}'
+        codigo_final = f'COMP-{counter:04d}'
+
+    nombre_final = nombre or f'Competencia Test {counter}'
+
     return Competencia.objects.create(
         asignatura=asignatura,
+        tipo=tipo,
         codigo=codigo_final,
-        nombre=nombre,
+        nombre=nombre_final,
+        **kwargs,
+    )
+
+
+def make_competencia_transversal(
+    codigo=None,
+    nombre=None,
+    horas_trimestre_transversal=4,
+    es_induccion=False,
+    **kwargs,
+):
+    """
+    Crea una Competencia TRANSVERSAL.
+
+    IMPORTANTE: asignatura DEBE ser None (clean() lo valida).
+    horas_trimestre_transversal es obligatorio para transversales.
+    """
+    counter = Competencia.objects.count()
+    codigo_final = codigo or f'TRANS-{counter:04d}'
+    while Competencia.objects.filter(codigo=codigo_final).exists():
+        counter += 1
+        codigo_final = f'TRANS-{counter:04d}'
+
+    return Competencia.objects.create(
+        asignatura=None,
+        tipo=Competencia.TipoCompetencia.TRANSVERSAL,
+        codigo=codigo_final,
+        nombre=nombre or f'Competencia Transversal Test {counter}',
+        horas_trimestre_transversal=horas_trimestre_transversal,
+        es_induccion=es_induccion,
         **kwargs,
     )
 
@@ -58,45 +124,22 @@ def make_competencia(
 def make_rap(
     competencia=None,
     codigo=None,
-    descripcion='Implementa algoritmos básicos de ordenamiento.',
+    descripcion=None,
     **kwargs,
 ):
+    """Crea un ResultadoAprendizaje."""
     if competencia is None:
         competencia = make_competencia()
+
     counter = ResultadoAprendizaje.objects.count()
-    codigo_final = codigo or f'RAP-{counter:03d}'
+    codigo_final = codigo or f'RAP-{counter:04d}'
     while ResultadoAprendizaje.objects.filter(codigo=codigo_final).exists():
         counter += 1
-        codigo_final = f'RAP-{counter:03d}'
+        codigo_final = f'RAP-{counter:04d}'
+
     return ResultadoAprendizaje.objects.create(
         competencia=competencia,
         codigo=codigo_final,
-        descripcion=descripcion,
+        descripcion=descripcion or f'Resultado de aprendizaje test {counter}.',
         **kwargs,
-    )
-
-
-def make_docente_asignatura(docente, asignatura=None, activo=True):
-    if asignatura is None:
-        asignatura = make_asignatura()
-    return DocenteAsignatura.objects.create(
-        docente=docente,
-        asignatura=asignatura,
-        activo=activo,
-    )
-
-def make_ficha_para_modulo(modulo):
-    from ficha.models.ficha_model import Ficha
-    from datetime import date
-    counter = Ficha.objects.count()
-    return Ficha.objects.create(
-        codigo_ficha=f'FICHA-C-{counter:04d}',
-        version=modulo.version,
-        jornada=Ficha.Jornada.MANANA,
-        numero_estudiantes_estimado=25,
-        etapa=Ficha.Etapa.LECTIVA,
-        horas_semanales_objetivo=40,
-        trimestre=1,
-        estado=True,
-        fecha_inicio=date(2024, 1, 1),
     )

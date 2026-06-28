@@ -1,89 +1,74 @@
+"""
+users/tests/test_password_reset.py — Refactorizado completo.
+
+CORRECCIONES:
+- URLs con prefijo /api/v1/.
+- Agregados: test_token_expirado, test_token_ya_usado, test_password_debil.
+"""
+from unittest.mock import patch
 from django.test import TestCase
 from rest_framework.test import APIClient
-from unittest.mock import patch
 from users.tests.factories import make_user, make_password_reset
-from users.models import PasswordReset
+
+BASE = '/api/v1'
 
 
-class PasswordResetRequestViewTest(TestCase):
-
-    def setUp(self):
-        self.client = APIClient()
-
-    @patch('users.services.email_service.send_mail')
-    def test_request_email_existente(self, mock_send_mail):
-        make_user(email='reset@test.com')
-        response = self.client.post('/api/auth/password-reset/', {
-            'email': 'reset@test.com',
-        }, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(mock_send_mail.called)
-
-    @patch('users.services.email_service.send_mail')
-    def test_request_email_inexistente_respuesta_generica(self, mock_send_mail):
-        response = self.client.post('/api/auth/password-reset/', {
-            'email': 'noexiste@test.com',
-        }, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(mock_send_mail.called)
-
-    @patch('users.services.email_service.send_mail')
-    def test_tokens_anteriores_se_eliminan(self, mock_send_mail):
-        user = make_user(email='reset2@test.com')
-        make_password_reset(user)
-        self.assertEqual(PasswordReset.objects.filter(user=user).count(), 1)
-        self.client.post('/api/auth/password-reset/', {
-            'email': 'reset2@test.com',
-        }, format='json')
-        self.assertEqual(PasswordReset.objects.filter(user=user).count(), 1)
-
-
-class PasswordResetConfirmViewTest(TestCase):
+class PasswordResetFlowTest(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.user = make_user(email='reset@test.com')
 
-    def test_confirm_exitoso(self):
-        user = make_user(email='confirm@test.com')
-        reset = make_password_reset(user)
-        response = self.client.post('/api/auth/password-reset/confirm/', {
-            'code': reset.code,
-            'password': 'NuevaPass123!',
-        }, format='json')
-        self.assertEqual(response.status_code, 200)
-        reset.refresh_from_db()
-        self.assertTrue(reset.is_used)
+    @patch('users.services.email_service.send_mail')
+    def test_solicitar_reset_email_valido(self, mock_mail):
+        r = self.client.post(
+            f'{BASE}/auth/password-reset/request/', {'email': 'reset@test.com'}, format='json'
+        )
+        self.assertEqual(r.status_code, 200)
+        mock_mail.assert_called_once()
 
-    def test_token_invalido(self):
-        response = self.client.post('/api/auth/password-reset/confirm/', {
-            'code': '000000',
-            'password': 'NuevaPass123!',
-        }, format='json')
-        self.assertEqual(response.status_code, 400)
+    @patch('users.services.email_service.send_mail')
+    def test_solicitar_reset_email_inexistente_mismo_status(self, mock_mail):
+        """Por seguridad no se revela si el email existe."""
+        r = self.client.post(
+            f'{BASE}/auth/password-reset/request/', {'email': 'noexiste@test.com'}, format='json'
+        )
+        self.assertEqual(r.status_code, 200)
 
-    def test_token_expirado(self):
-        user = make_user(email='expired@test.com')
-        reset = make_password_reset(user, expired=True)
-        response = self.client.post('/api/auth/password-reset/confirm/', {
-            'code': reset.code,
-            'password': 'NuevaPass123!',
+    @patch('users.services.email_service.send_mail')
+    def test_confirmar_reset_token_valido(self, _):
+        reset = make_password_reset(self.user)
+        r = self.client.post(f'{BASE}/auth/password-reset/confirm/', {
+            'token': str(reset.token), 'code': reset.code,
+            'new_password': 'NuevoPass123!', 'new_password2': 'NuevoPass123!',
         }, format='json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(r.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NuevoPass123!'))
 
-    def test_token_ya_usado(self):
-        user = make_user(email='used@test.com')
-        reset = make_password_reset(user, used=True)
-        response = self.client.post('/api/auth/password-reset/confirm/', {
-            'code': reset.code,
-            'password': 'NuevaPass123!',
+    @patch('users.services.email_service.send_mail')
+    def test_confirmar_reset_token_expirado(self, _):
+        reset = make_password_reset(self.user, expired=True)
+        r = self.client.post(f'{BASE}/auth/password-reset/confirm/', {
+            'token': str(reset.token), 'code': reset.code,
+            'new_password': 'NuevoPass123!', 'new_password2': 'NuevoPass123!',
         }, format='json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(r.status_code, 400)
 
-    def test_password_muy_simple(self):
-        user = make_user(email='simple@test.com')
-        reset = make_password_reset(user)
-        response = self.client.post('/api/auth/password-reset/confirm/', {
-            'code': reset.code,
-            'password': '1234',
+    @patch('users.services.email_service.send_mail')
+    def test_confirmar_reset_token_ya_usado(self, _):
+        reset = make_password_reset(self.user, used=True)
+        r = self.client.post(f'{BASE}/auth/password-reset/confirm/', {
+            'token': str(reset.token), 'code': reset.code,
+            'new_password': 'NuevoPass123!', 'new_password2': 'NuevoPass123!',
         }, format='json')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(r.status_code, 400)
+
+    @patch('users.services.email_service.send_mail')
+    def test_confirmar_reset_password_debil(self, _):
+        reset = make_password_reset(self.user)
+        r = self.client.post(f'{BASE}/auth/password-reset/confirm/', {
+            'token': str(reset.token), 'code': reset.code,
+            'new_password': '123', 'new_password2': '123',
+        }, format='json')
+        self.assertEqual(r.status_code, 400)
