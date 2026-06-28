@@ -1,71 +1,73 @@
-from langchain_ollama import OllamaLLM, OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_groq import ChatGroq
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+GROQ_API_KEY = None  # se carga desde settings
+CHROMA_DIR   = './chroma_db'
 
 
 class CHRONOSIAChatbot:
-    """
-    RAG + contexto vivo de DB.
-    El contexto_rol se inyecta como bloque de sistema antes de cada respuesta,
-    garantizando que el LLM solo vea lo que el usuario tiene permitido.
-    """
 
     def __init__(self):
-        self.llm = OllamaLLM(
-            model='llama3',
-            base_url=OLLAMA_BASE_URL,
+        import os
+        from django.conf import settings
+
+        api_key = getattr(settings, 'GROQ_API_KEY', None) or os.getenv('GROQ_API_KEY')
+
+        self.llm = ChatGroq(
+            model='llama-3.1-8b-instant',
+            api_key=api_key,
             temperature=0.5,
-            top_k=40,
-            top_p=0.9,
-            repeat_penalty=1.1,
         )
-        self.embeddings = OllamaEmbeddings(
-            model='nomic-embed-text',
-            base_url=OLLAMA_BASE_URL,
+
+        # Embeddings locales livianos — no necesitan GPU ni Ollama
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+            model_kwargs={'device': 'cpu'},
         )
+
         self.vectorstore = Chroma(
             embedding_function=self.embeddings,
-            persist_directory='./chroma_db',
+            persist_directory=CHROMA_DIR,
+            collection_name='planify',
         )
 
     def responder(
         self,
         pregunta: str,
-        historial: list,          # [{"role": "user"|"assistant", "content": "..."}]
-        contexto_rol: str = '',   # generado por ContextBuilder
+        historial: list,
+        contexto_rol: str = '',
     ) -> str:
-
-        # ── 1. Recuperar documentos relevantes del vectorstore ─────────────
-        retriever = self.vectorstore.as_retriever(
-            search_type='similarity',
-            search_kwargs={'k': 5},
-        )
+        # ── RAG ──────────────────────────────────────────────────────────────
         try:
-            docs = retriever.invoke(pregunta)
-            contexto_docs = "\n\n".join(d.page_content for d in docs)
+            retriever = self.vectorstore.as_retriever(
+                search_type='similarity',
+                search_kwargs={'k': 5},
+            )
+            docs      = retriever.invoke(pregunta)
+            contexto_docs = '\n\n'.join(d.page_content for d in docs)
         except Exception:
             contexto_docs = ''
 
-        # ── 2. Construir historial como texto ──────────────────────────────
-        # Solo los últimos 3 turnos para no saturar el contexto
+        # ── Historial ────────────────────────────────────────────────────────
         historial_txt = ''
         for msg in historial[-6:]:
-            role_label = 'Usuario' if msg.get('role') == 'user' else 'Asistente'
-            historial_txt += f"{role_label}: {msg.get('content', '')}\n"
+            rol_label     = 'Usuario' if msg.get('role') == 'user' else 'Asistente'
+            historial_txt += f"{rol_label}: {msg.get('content', '')}\n"
 
-        # ── 3. Prompt final ────────────────────────────────────────────────
+        # ── Prompt ───────────────────────────────────────────────────────────
         prompt = f"""Eres CHRONOSIA, el asistente inteligente del sistema académico PLANIFY.
 Responde siempre en español, de forma clara, precisa y directa.
 No inventes información; si no la tienes, dilo explícitamente.
+No reveles datos de usuarios que no correspondan al rol del solicitante.
 
 ══════════════════════════════
-CONTEXTO DEL USUARIO (datos en tiempo real de la base de datos)
+CONTEXTO DEL USUARIO (datos en tiempo real)
 ══════════════════════════════
 {contexto_rol}
 
 ══════════════════════════════
-INFORMACIÓN ADICIONAL DEL SISTEMA (base de conocimiento)
+INFORMACIÓN ADICIONAL DEL SISTEMA
 ══════════════════════════════
 {contexto_docs if contexto_docs else 'Sin documentos adicionales relevantes.'}
 
@@ -81,4 +83,6 @@ PREGUNTA ACTUAL
 
 RESPUESTA:"""
 
-        return self.llm.invoke(prompt)
+        # ChatGroq devuelve un AIMessage, extraemos el texto
+        response = self.llm.invoke(prompt)
+        return response.content
